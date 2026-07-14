@@ -44,7 +44,7 @@ integration. Install it via the Add-on Store:
 2. Click the **⋮** menu (top right) → **Repositories**.
 3. Add this URL:
    ```
-   https://github.com/YOUR_GITHUB_USERNAME/HA-Dashboard-CleanUp
+   https://github.com/jstockley/HA-Dashboard-CleanUp
    ```
 4. Close the dialog and refresh — **"HA Dashboard CleanUp"** will appear
    under a new section on the Add-on Store page.
