@@ -40,6 +40,10 @@
   <button onclick="loadBackups()">Refresh Backup List</button>
   <div id="backupList" style="margin-top:12px;"></div>
 
+  <h2 style="font-size:16px;margin-top:28px;">Diagnostics</h2>
+  <button onclick="runDebug()">Check Permissions / Token</button>
+  <pre id="debugOut" style="background:white;padding:12px;border-radius:8px;font-size:12px;white-space:pre-wrap;margin-top:8px;"></pre>
+
 <script>
 async function runAudit() {
   const status = document.getElementById('status');
@@ -159,6 +163,14 @@ async function restoreBackup(slug, name) {
   });
   const data = await res.json();
   status.textContent = data.success ? 'Restore triggered. Waiting for Home Assistant to come back...' : 'Error: ' + data.error;
+}
+
+async function runDebug() {
+  const out = document.getElementById('debugOut');
+  out.textContent = 'Checking...';
+  const res = await fetch('api/debug');
+  const data = await res.json();
+  out.textContent = JSON.stringify(data, null, 2);
 }
 
 loadBackups();

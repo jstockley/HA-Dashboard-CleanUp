@@ -17,7 +17,20 @@ BACKUP_PREFIX = "dashboard_cleanup_"
 
 
 def supervisor_headers():
+    if not SUPERVISOR_TOKEN:
+        raise RuntimeError(
+            "SUPERVISOR_TOKEN environment variable is not set inside the app "
+            "container. This usually means the app needs a full uninstall + "
+            "reinstall for permission grants to take effect."
+        )
     return {"Authorization": f"Bearer {SUPERVISOR_TOKEN}", "Content-Type": "application/json"}
+
+
+def _raise_with_body(r):
+    """Like raise_for_status(), but includes the response body, which is where
+    Supervisor puts the actual reason (raise_for_status() alone discards it)."""
+    if not r.ok:
+        raise RuntimeError(f"{r.status_code} {r.reason} for {r.url} — body: {r.text[:500]}")
 
 
 def create_backup(name):
@@ -29,14 +42,14 @@ def create_backup(name):
         json={"name": name, "homeassistant": True},
         timeout=180,
     )
-    r.raise_for_status()
+    _raise_with_body(r)
     data = r.json()
     return data.get("data", {}).get("slug")
 
 
 def list_backups():
     r = requests.get(f"{SUPERVISOR_BASE}/backups", headers=supervisor_headers(), timeout=30)
-    r.raise_for_status()
+    _raise_with_body(r)
     backups = r.json().get("data", {}).get("backups", [])
     backups.sort(key=lambda b: b.get("date", ""), reverse=True)
     return backups
@@ -51,7 +64,7 @@ def restore_backup(slug):
         json={"homeassistant": True},
         timeout=300,
     )
-    r.raise_for_status()
+    _raise_with_body(r)
     return r.json()
 
 
@@ -89,7 +102,7 @@ def get_valid_entity_ids():
     (covers disabled entities too), used as the 'this entity really exists' set."""
     headers = {"Authorization": f"Bearer {SUPERVISOR_TOKEN}"}
     r = requests.get(f"{REST_BASE}/states", headers=headers, timeout=30)
-    r.raise_for_status()
+    _raise_with_body(r)
     state_ids = {s["entity_id"] for s in r.json()}
 
     reg_result = ws_call([{"type": "config/entity_registry/list"}])[0]
@@ -264,6 +277,37 @@ def api_audit():
         return jsonify({"success": True, "report": report})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/debug", methods=["GET"])
+def api_debug():
+    info = {
+        "supervisor_token_present": bool(SUPERVISOR_TOKEN),
+        "supervisor_token_length": len(SUPERVISOR_TOKEN) if SUPERVISOR_TOKEN else 0,
+    }
+    # Try a minimal, harmless call against each API surface and report the raw result.
+    try:
+        r = requests.get(f"{REST_BASE}/config", headers=supervisor_headers(), timeout=15)
+        info["core_api_status"] = r.status_code
+        info["core_api_body"] = r.text[:300]
+    except Exception as e:
+        info["core_api_error"] = str(e)
+
+    try:
+        r = requests.get(f"{SUPERVISOR_BASE}/info", headers=supervisor_headers(), timeout=15)
+        info["supervisor_api_status"] = r.status_code
+        info["supervisor_api_body"] = r.text[:300]
+    except Exception as e:
+        info["supervisor_api_error"] = str(e)
+
+    try:
+        r = requests.get(f"{SUPERVISOR_BASE}/backups", headers=supervisor_headers(), timeout=15)
+        info["backups_api_status"] = r.status_code
+        info["backups_api_body"] = r.text[:300]
+    except Exception as e:
+        info["backups_api_error"] = str(e)
+
+    return jsonify(info)
 
 
 @app.route("/api/backup", methods=["POST"])
