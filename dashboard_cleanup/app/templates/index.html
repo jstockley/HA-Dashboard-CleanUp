@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard Cleanup</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; color: #222; }
+  h1 { font-size: 20px; }
+  .bar { display: flex; gap: 12px; margin-bottom: 20px; }
+  button { padding: 10px 18px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+  #auditBtn { background: #03a9f4; color: white; }
+  #applyBtn { background: #e53935; color: white; }
+  #applyBtn:disabled { background: #ccc; cursor: not-allowed; }
+  .card { background: white; border-radius: 8px; padding: 14px 18px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .card h3 { margin: 0 0 8px 0; font-size: 15px; }
+  .clean { color: #2e7d32; }
+  .warn { color: #c62828; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #eee; }
+  .muted { color: #888; font-size: 12px; }
+  #status { margin-top: 16px; font-size: 13px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>🧹 Dashboard Cleanup</h1>
+  <p class="muted">Step 1: Run an audit (read-only). Step 2: Review what it found. Step 3: Apply, if you're happy — a backup is taken automatically first unless you untick it below.</p>
+  <div class="bar">
+    <button id="auditBtn" onclick="runAudit()">Run Audit</button>
+    <button id="applyBtn" onclick="applyCleanup()" disabled>Apply Cleanup</button>
+    <button id="backupBtn" onclick="manualBackup()">Create Backup Now</button>
+    <label class="muted" style="display:flex;align-items:center;gap:6px;">
+      <input type="checkbox" id="autoBackup" checked> Auto-backup before Apply
+    </label>
+  </div>
+  <div id="results"></div>
+  <div id="status"></div>
+
+  <h2 style="font-size:16px;margin-top:28px;">Backups &amp; Restore</h2>
+  <p class="muted">Restoring rolls back your Home Assistant core config (including all dashboards) to the selected backup, and briefly restarts HA.</p>
+  <button onclick="loadBackups()">Refresh Backup List</button>
+  <div id="backupList" style="margin-top:12px;"></div>
+
+<script>
+async function runAudit() {
+  const status = document.getElementById('status');
+  const results = document.getElementById('results');
+  status.textContent = 'Scanning dashboards...';
+  results.innerHTML = '';
+  document.getElementById('applyBtn').disabled = true;
+
+  const res = await fetch('api/audit', { method: 'POST' });
+  const data = await res.json();
+  status.textContent = '';
+
+  if (!data.success) {
+    status.textContent = 'Error: ' + data.error;
+    return;
+  }
+
+  let totalOrphans = 0;
+  data.report.forEach(d => {
+    totalOrphans += d.orphan_count || 0;
+    const card = document.createElement('div');
+    card.className = 'card';
+    let html = `<h3>${d.dashboard} <span class="muted">(${d.url_path || 'default'})</span></h3>`;
+    if (d.error) {
+      html += `<div class="warn">Skipped: ${d.error} (likely YAML-mode dashboard, read-only)</div>`;
+    } else if (d.orphan_count === 0) {
+      html += `<div class="clean">No orphaned entities found.</div>`;
+    } else {
+      html += `<div class="warn">${d.orphan_count} orphaned entity reference(s):</div>`;
+      html += '<table><tr><th>Entity ID</th><th>Location</th></tr>';
+      d.orphans.forEach(o => {
+        html += `<tr><td>${o.entity_id}</td><td class="muted">${o.path}</td></tr>`;
+      });
+      html += '</table>';
+    }
+    card.innerHTML = html;
+    results.appendChild(card);
+  });
+
+  status.textContent = totalOrphans > 0
+    ? `Found ${totalOrphans} orphaned reference(s) total. Review above, then Apply Cleanup when ready.`
+    : 'All dashboards are clean — nothing to remove.';
+  document.getElementById('applyBtn').disabled = totalOrphans === 0;
+}
+
+async function applyCleanup() {
+  const autoBackup = document.getElementById('autoBackup').checked;
+  if (!confirm('This will permanently rewrite the affected dashboards.' + (autoBackup ? ' A backup will be taken first.' : ' No backup will be taken — are you sure?'))) return;
+  const status = document.getElementById('status');
+  status.textContent = autoBackup ? 'Taking backup, then applying cleanup...' : 'Applying cleanup...';
+  const res = await fetch('api/apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ auto_backup: autoBackup })
+  });
+  const data = await res.json();
+
+  if (!data.success) {
+    status.textContent = 'Error: ' + data.error;
+    return;
+  }
+
+  let log = '';
+  if (data.backup_slug) {
+    log += `Backup taken: ${data.backup_slug}\n`;
+  }
+  log += 'Cleanup complete:\n';
+  data.results.forEach(r => {
+    log += `\n${r.dashboard}: ${r.saved ? 'saved' : 'FAILED (' + r.error + ')'}\n`;
+    r.removed.forEach(item => {
+      log += `  - removed ${item.entity_id || '(card)'} at ${item.path}${item.note ? ' — ' + item.note : ''}\n`;
+    });
+  });
+  status.textContent = log;
+  document.getElementById('applyBtn').disabled = true;
+  loadBackups();
+}
+
+async function manualBackup() {
+  const status = document.getElementById('status');
+  status.textContent = 'Creating backup...';
+  const res = await fetch('api/backup', { method: 'POST' });
+  const data = await res.json();
+  status.textContent = data.success ? `Backup created: ${data.slug}` : 'Error: ' + data.error;
+  loadBackups();
+}
+
+async function loadBackups() {
+  const list = document.getElementById('backupList');
+  list.innerHTML = '<span class="muted">Loading...</span>';
+  const res = await fetch('api/backups');
+  const data = await res.json();
+  if (!data.success) {
+    list.innerHTML = `<div class="warn">Error: ${data.error}</div>`;
+    return;
+  }
+  if (data.backups.length === 0) {
+    list.innerHTML = '<span class="muted">No backups yet.</span>';
+    return;
+  }
+  let html = '<table><tr><th>Name</th><th>Date</th><th></th></tr>';
+  data.backups.forEach(b => {
+    html += `<tr><td>${b.name}</td><td class="muted">${b.date}</td><td><button onclick="restoreBackup('${b.slug}','${b.name.replace(/'/g, "")}')">Restore</button></td></tr>`;
+  });
+  html += '</table>';
+  list.innerHTML = html;
+}
+
+async function restoreBackup(slug, name) {
+  if (!confirm(`Restore "${name}"? This rolls back your HA core config (including dashboards) and briefly restarts Home Assistant.`)) return;
+  const status = document.getElementById('status');
+  status.textContent = 'Restoring backup — Home Assistant will restart shortly...';
+  const res = await fetch('api/restore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug })
+  });
+  const data = await res.json();
+  status.textContent = data.success ? 'Restore triggered. Waiting for Home Assistant to come back...' : 'Error: ' + data.error;
+}
+
+loadBackups();
+</script>
+</body>
+</html>
