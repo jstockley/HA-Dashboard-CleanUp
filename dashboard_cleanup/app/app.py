@@ -284,6 +284,7 @@ def api_debug():
     info = {
         "supervisor_token_present": bool(SUPERVISOR_TOKEN),
         "supervisor_token_length": len(SUPERVISOR_TOKEN) if SUPERVISOR_TOKEN else 0,
+        "env_var_names": sorted(os.environ.keys()),
     }
     # Try a minimal, harmless call against each API surface and report the raw result.
     try:
