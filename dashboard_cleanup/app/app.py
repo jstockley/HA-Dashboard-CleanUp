@@ -100,25 +100,28 @@ def ws_call(messages):
 def get_valid_entity_ids():
     """An entity_id counts as valid if either:
     - it currently has a live state, or
-    - it's in the entity registry AND was deliberately disabled (disabled_by set).
+    - it's in the entity registry and YOU specifically disabled it
+      (disabled_by == "user").
 
-    A registry entry with no current state and disabled_by == None is a dead
-    stub — usually left behind by an integration that was torn out without a
-    clean removal — and is exactly what Home Assistant's frontend shows as
-    "Entity not found". Those should NOT count as valid."""
+    Any other reason an entity might lack a state — disabled_by
+    "config_entry" (whole integration disabled), "device", "integration",
+    or simply a dead registry stub with no disabled_by at all — renders
+    identically to a genuinely missing entity in Home Assistant's frontend
+    ("Entity not found"), so those all count as orphaned. Only a deliberate,
+    per-entity disable by the user themselves is protected."""
     headers = {"Authorization": f"Bearer {SUPERVISOR_TOKEN}"}
     r = requests.get(f"{REST_BASE}/states", headers=headers, timeout=30)
     _raise_with_body(r)
     state_ids = {s["entity_id"] for s in r.json()}
 
     reg_result = ws_call([{"type": "config/entity_registry/list"}])[0]
-    disabled_registered_ids = set()
+    user_disabled_ids = set()
     if reg_result.get("success"):
-        disabled_registered_ids = {
-            e["entity_id"] for e in reg_result["result"] if e.get("disabled_by")
+        user_disabled_ids = {
+            e["entity_id"] for e in reg_result["result"] if e.get("disabled_by") == "user"
         }
 
-    return state_ids | disabled_registered_ids
+    return state_ids | user_disabled_ids
 
 
 def get_dashboards():
@@ -330,7 +333,7 @@ def api_inspect():
         result["disabled_by"] = entry.get("disabled_by") if entry else None
 
         # What our tool would currently conclude
-        would_be_valid = result.get("has_state", False) or (entry is not None and bool(result["disabled_by"]))
+        would_be_valid = result.get("has_state", False) or (result["disabled_by"] == "user")
         result["tool_considers_this_orphaned"] = not would_be_valid
 
         return jsonify({"success": True, "result": result})

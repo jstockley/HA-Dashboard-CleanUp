@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [1.7.0] - 2026-07-15
+
+### Fixed
+- Orphan detection was still missing entities disabled at the integration
+  level (`disabled_by: "config_entry"`, e.g. a whole failed/disabled
+  integration like a dead FordPass connection) — these render identically
+  to a genuinely missing entity ("Entity not found") in the dashboard, but
+  were being protected by the 1.5.0 fix's blanket "any disabled_by counts
+  as valid" rule. Now only entities *you* individually disabled
+  (`disabled_by == "user"`) are protected; every other disable reason, and
+  entities with no state at all, count as orphaned.
+
 ## [1.6.0] - 2026-07-15
 
 ### Added

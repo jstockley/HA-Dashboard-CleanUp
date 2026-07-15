@@ -67,15 +67,16 @@ integration. Install it via the Add-on Store:
 
 ## How "orphaned" is defined
 
-An entity is considered valid if it currently has a live state, **or** it's
-in the entity registry and was deliberately disabled (has `disabled_by` set —
-e.g. you disabled it yourself, or an integration disabled it). This means
-intentionally disabled entities are **not** flagged.
+An entity is considered valid if it currently has a live state, **or** you
+specifically disabled it yourself (registry `disabled_by` is exactly
+`"user"`).
 
-Registry entries with no current state and no disable reason — typically
-leftovers from an integration that was removed without a clean uninstall —
-**are** flagged, since these are exactly what Home Assistant's frontend
-shows as "Entity not found."
+Everything else counts as orphaned — including registry entries disabled
+for other reasons (`"config_entry"`, `"device"`, `"integration"`) and dead
+stubs with no `disabled_by` at all. These all render identically to a
+genuinely missing entity in Home Assistant's frontend ("Entity not found"),
+regardless of the underlying reason, so only a deliberate per-entity
+disable by you is protected.
 
 ## Removal behaviour
 

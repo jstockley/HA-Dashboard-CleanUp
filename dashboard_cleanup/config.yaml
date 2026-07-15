@@ -1,5 +1,5 @@
 name: "Dashboard Cleanup"
-version: "1.6.0"
+version: "1.7.0"
 slug: "dashboard_cleanup"
 description: "Audit and remove orphaned/deleted entities from Lovelace dashboards, with built-in backup/restore"
 url: "https://github.com/jstockley/HA-Dashboard-CleanUp"
