@@ -12,6 +12,8 @@ RUN apk add --no-cache python3 py3-pip \
     && pip3 install --no-cache-dir --break-system-packages flask requests websocket-client
 
 COPY app /app
+COPY run.sh /
+RUN chmod a+x /run.sh
 WORKDIR /app
 
-CMD [ "python3", "/app/app.py" ]
+CMD [ "/run.sh" ]
