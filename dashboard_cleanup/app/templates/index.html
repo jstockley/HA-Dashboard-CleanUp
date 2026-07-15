@@ -44,6 +44,12 @@
   <button onclick="runDebug()">Check Permissions / Token</button>
   <pre id="debugOut" style="background:white;padding:12px;border-radius:8px;font-size:12px;white-space:pre-wrap;margin-top:8px;"></pre>
 
+  <div style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+    <input id="inspectEntityId" type="text" placeholder="sensor.fordpass_elveh" style="flex:1;padding:8px;border:1px solid #ccc;border-radius:6px;">
+    <button onclick="runInspect()">Inspect Entity</button>
+  </div>
+  <pre id="inspectOut" style="background:white;padding:12px;border-radius:8px;font-size:12px;white-space:pre-wrap;margin-top:8px;"></pre>
+
 <script>
 async function runAudit() {
   const status = document.getElementById('status');
@@ -169,6 +175,16 @@ async function runDebug() {
   const out = document.getElementById('debugOut');
   out.textContent = 'Checking...';
   const res = await fetch('api/debug');
+  const data = await res.json();
+  out.textContent = JSON.stringify(data, null, 2);
+}
+
+async function runInspect() {
+  const entityId = document.getElementById('inspectEntityId').value.trim();
+  const out = document.getElementById('inspectOut');
+  if (!entityId) { out.textContent = 'Enter an entity_id first.'; return; }
+  out.textContent = 'Checking...';
+  const res = await fetch('api/inspect?entity_id=' + encodeURIComponent(entityId));
   const data = await res.json();
   out.textContent = JSON.stringify(data, null, 2);
 }

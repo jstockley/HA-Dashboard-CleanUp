@@ -301,6 +301,43 @@ def api_audit():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/inspect", methods=["GET"])
+def api_inspect():
+    entity_id = request.args.get("entity_id", "").strip()
+    if not entity_id:
+        return jsonify({"success": False, "error": "Provide ?entity_id=..."}), 400
+    try:
+        result = {"entity_id": entity_id}
+
+        # Current state, if any
+        headers = supervisor_headers()
+        r = requests.get(f"{REST_BASE}/states/{entity_id}", headers=headers, timeout=15)
+        if r.status_code == 200:
+            result["has_state"] = True
+            result["state"] = r.json()
+        elif r.status_code == 404:
+            result["has_state"] = False
+        else:
+            result["state_lookup_status"] = r.status_code
+            result["state_lookup_body"] = r.text[:300]
+
+        # Registry entry, if any
+        reg_result = ws_call([{"type": "config/entity_registry/list"}])[0]
+        entry = None
+        if reg_result.get("success"):
+            entry = next((e for e in reg_result["result"] if e["entity_id"] == entity_id), None)
+        result["registry_entry"] = entry
+        result["disabled_by"] = entry.get("disabled_by") if entry else None
+
+        # What our tool would currently conclude
+        would_be_valid = result.get("has_state", False) or (entry is not None and bool(result["disabled_by"]))
+        result["tool_considers_this_orphaned"] = not would_be_valid
+
+        return jsonify({"success": True, "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/debug", methods=["GET"])
 def api_debug():
     info = {

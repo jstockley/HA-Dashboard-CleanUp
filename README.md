@@ -91,6 +91,10 @@ shows as "Entity not found."
 Issues and PRs welcome. This is a small, single-purpose tool — the entire
 add-on lives in [`dashboard_cleanup/`](./dashboard_cleanup).
 
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for release history.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
