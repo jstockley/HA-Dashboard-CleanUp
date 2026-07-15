@@ -98,19 +98,27 @@ def ws_call(messages):
 
 
 def get_valid_entity_ids():
-    """Union of every entity_id currently in the state machine + entity registry
-    (covers disabled entities too), used as the 'this entity really exists' set."""
+    """An entity_id counts as valid if either:
+    - it currently has a live state, or
+    - it's in the entity registry AND was deliberately disabled (disabled_by set).
+
+    A registry entry with no current state and disabled_by == None is a dead
+    stub — usually left behind by an integration that was torn out without a
+    clean removal — and is exactly what Home Assistant's frontend shows as
+    "Entity not found". Those should NOT count as valid."""
     headers = {"Authorization": f"Bearer {SUPERVISOR_TOKEN}"}
     r = requests.get(f"{REST_BASE}/states", headers=headers, timeout=30)
     _raise_with_body(r)
     state_ids = {s["entity_id"] for s in r.json()}
 
     reg_result = ws_call([{"type": "config/entity_registry/list"}])[0]
-    reg_ids = set()
+    disabled_registered_ids = set()
     if reg_result.get("success"):
-        reg_ids = {e["entity_id"] for e in reg_result["result"]}
+        disabled_registered_ids = {
+            e["entity_id"] for e in reg_result["result"] if e.get("disabled_by")
+        }
 
-    return state_ids | reg_ids
+    return state_ids | disabled_registered_ids
 
 
 def get_dashboards():
