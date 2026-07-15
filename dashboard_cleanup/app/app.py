@@ -229,13 +229,27 @@ def clean_config(config, valid_ids):
     for vi, view in enumerate(views):
         if "badges" in view and isinstance(view["badges"], list):
             view["badges"] = clean_entities_list(view["badges"], valid_ids, removed, f"views[{vi}]")
-        cards = view.get("cards", [])
-        cleaned_cards = []
-        for ci, card in enumerate(cards):
-            c = clean_card(card, valid_ids, removed, f"views[{vi}].cards[{ci}]")
-            if c is not None:
-                cleaned_cards.append(c)
-        view["cards"] = cleaned_cards
+
+        # Legacy / masonry views: cards live directly under view.cards
+        if "cards" in view and isinstance(view["cards"], list):
+            cleaned_cards = []
+            for ci, card in enumerate(view["cards"]):
+                c = clean_card(card, valid_ids, removed, f"views[{vi}].cards[{ci}]")
+                if c is not None:
+                    cleaned_cards.append(c)
+            view["cards"] = cleaned_cards
+
+        # Modern "sections" views: cards live under view.sections[].cards.
+        # Each section is cleaned like a card container — clean_card already
+        # knows how to recurse into a "cards" list, so reuse it directly.
+        if "sections" in view and isinstance(view["sections"], list):
+            cleaned_sections = []
+            for si, section in enumerate(view["sections"]):
+                s = clean_card(section, valid_ids, removed, f"views[{vi}].sections[{si}]")
+                if s is not None:
+                    cleaned_sections.append(s)
+            view["sections"] = cleaned_sections
+
     config["views"] = views
     return config, removed
 
